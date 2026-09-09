@@ -1,0 +1,13 @@
+# build artifacts
+/marketplace
+/marketplace-api
+**/*.test
+**/coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Misc
+.DS_Store

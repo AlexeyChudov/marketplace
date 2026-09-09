@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  acceptance-untouched:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: verify acceptance/ unchanged
+        run: sha256sum -c .acceptance-manifest.sha256
+
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l .; exit 1)
+      - name: vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      - name: unit tests
+        run: go test -race -count=1 ./...
+      # Линтер идёт до acceptance: замечания по стилю студент получает
+      # даже когда тесты красные, а не только после того как всё починит.
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12
+      - name: acceptance
+        working-directory: acceptance
+        env:
+          MARKETPLACE_SRC: ${{ github.workspace }}
+          JWT_SECRET: test-secret
+        run: go test -race -count=1 -v ./...
