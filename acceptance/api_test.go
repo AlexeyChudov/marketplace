@@ -294,16 +294,17 @@ func TestAcc12_JWTTampered(t *testing.T) {
 		"iat":  time.Now().Unix(),
 		"exp":  time.Now().Add(time.Hour).Unix(),
 	})
-	// Flip one char in the signature segment, ensuring the replacement
-	// actually differs from the original (avoids a 1/64 flake when the
-	// signature already ended in 'A').
+	// Flip the FIRST char of the signature segment. Not the last one: in
+	// unpadded base64 the final char carries only 2 significant bits, so
+	// swapping it for another char with the same top bits decodes to the
+	// identical signature and the "tampered" token verifies fine.
 	parts := strings.Split(good, ".")
-	last := parts[2][len(parts[2])-1]
+	first := parts[2][0]
 	repl := byte('A')
-	if last == repl {
+	if first == repl {
 		repl = 'B'
 	}
-	parts[2] = parts[2][:len(parts[2])-1] + string(repl)
+	parts[2] = string(repl) + parts[2][1:]
 	tampered := strings.Join(parts, ".")
 	r := s.do(t, "POST", "/listings", tampered, map[string]any{"title": "x", "price": 1.0, "stock": 1})
 	if r.status != 401 {
