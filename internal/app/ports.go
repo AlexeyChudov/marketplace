@@ -13,9 +13,9 @@ import (
 // Save returns ErrEmailTaken when the normalized email violates uniqueness.
 // GetByEmail returns ErrNotFound when user with provided email wasn't found
 type UserRepository interface {
-	Save(ctx context.Context, user domain.User) error
-	GetByEmail(ctx context.Context, normalizedEmail string) (domain.User, error)
-	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
+	SaveUser(ctx context.Context, user domain.User) error
+	GetUserByEmail(ctx context.Context, normalizedEmail string) (domain.User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 }
 
 // ListingRepository owns persistence and atomic stock changes. Purchase must
@@ -47,8 +47,11 @@ type TokenPair struct {
 }
 
 type TokenClaims struct {
-	Subject uuid.UUID
-	Type    TokenType
+	Subject   uuid.UUID
+	Type      TokenType
+	Role      domain.Role
+	IssuedAt  time.Time
+	ExpiresAt time.Time
 }
 
 // TokenService verifies signature, expiration, and token type in Verify.

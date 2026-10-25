@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"marketplace-api/internal/domain"
 	"net/mail"
 	"strings"
+
+	"marketplace-api/internal/domain"
+
+	"github.com/google/uuid"
 )
 
 // Объединяет в себе сценарии регистрации, входа, обновления токенов
@@ -14,10 +17,18 @@ type AuthService struct {
 	repo         UserRepository
 	hasher       PasswordHasher
 	tokenService TokenService
-	IDs          randomIDs
+	ids          IDGenerator
+}
+
+func NewAuthService(repo UserRepository, hasher PasswordHasher, tokenService TokenService, ids IDGenerator) *AuthService {
+	if ids == nil {
+		ids = randomIDs{}
+	}
+	return &AuthService{repo: repo, hasher: hasher, tokenService: tokenService, ids: ids}
 }
 
 type UserDTO struct {
+	ID     uuid.UUID
 	Email  string
 	Role   domain.Role
 	Tokens TokenPair
@@ -29,15 +40,18 @@ func (as AuthService) Register(ctx context.Context, email string, password strin
 	}
 
 	email = normalizeEmail(email)
-	//валидация почты почты
+	//валидация почты
 	err := validateEmail(email)
 	if err != nil {
 		return UserDTO{}, ErrInvalidInput
 	}
-	if !role.Valid() {
-		return UserDTO{}, fmt.Errorf("Invalid role: only %s or %s is acceptable: %w", domain.RoleBuyer, domain.RoleSeller, ErrInvalidInput)
+	if password == "" {
+		return UserDTO{}, ErrInvalidInput
 	}
-	id := as.IDs.NewID()
+	if !role.Valid() {
+		return UserDTO{}, fmt.Errorf("invalid role: only %s or %s is acceptable: %w", domain.RoleBuyer, domain.RoleSeller, ErrInvalidInput)
+	}
+	id := as.ids.NewID()
 	passHash, err := as.hasher.Hash(password)
 	if err != nil {
 		return UserDTO{}, fmt.Errorf("hash password: %w", err)
@@ -47,7 +61,7 @@ func (as AuthService) Register(ctx context.Context, email string, password strin
 		return UserDTO{}, ErrInvalidInput
 	}
 	//Сохранение, внутри проверка на существование пользователя
-	err = as.repo.Save(ctx, user)
+	err = as.repo.SaveUser(ctx, user)
 	if err != nil {
 		if errors.Is(err, ErrEmailTaken) {
 			return UserDTO{}, fmt.Errorf("%w: %w", ErrConflict, err)
@@ -61,6 +75,7 @@ func (as AuthService) Register(ctx context.Context, email string, password strin
 	}
 
 	return UserDTO{
+		ID:     id,
 		Email:  email,
 		Role:   role,
 		Tokens: tokens,
@@ -80,7 +95,7 @@ func (as AuthService) Login(ctx context.Context, email string, password string) 
 		return TokenPair{}, ErrInvalidInput
 	}
 
-	user, err := as.repo.GetByEmail(ctx, email)
+	user, err := as.repo.GetUserByEmail(ctx, email)
 	if errors.Is(err, ErrNotFound) {
 		return TokenPair{}, ErrUnauthenticated
 	}
@@ -115,7 +130,7 @@ func (as AuthService) Refresh(ctx context.Context, token string) (TokenPair, err
 		return TokenPair{}, fmt.Errorf("only refresh is acceptable: %w", ErrUnauthenticated)
 	}
 	userId := claims.Subject
-	user, err := as.repo.GetByID(ctx, userId)
+	user, err := as.repo.GetUserByID(ctx, userId)
 	if errors.Is(err, ErrNotFound) {
 		return TokenPair{}, ErrUnauthenticated
 	}
